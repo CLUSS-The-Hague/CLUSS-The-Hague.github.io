@@ -1,0 +1,12 @@
+{
+  "name": "cluss-website",
+  "version": "1.0.0",
+  "private": true,
+  "description": "The CLÜSS website: a static site with no dependencies.",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "dev": "node build.mjs && node serve.mjs",
+    "start": "node serve.mjs"
+  }
+}
