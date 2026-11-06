@@ -1,6 +1,7 @@
 // Builds the static site into dist/. No dependencies: `npm run build`.
 import fs from 'node:fs';
 import path from 'node:path';
+import { execSync } from 'node:child_process';
 import * as c from './content/site.mjs';
 import {
   PUNTITOS, COMITE, esc, en, mark, ext, btn, tag, titular, lista, cartel, fotoTag,
@@ -75,32 +76,67 @@ const NAV = [
   ['/contact/', 'Contacto', 'contact'],
 ];
 
-function layout({ title, desc, active, body, pathName, suelo = 'dia', head = '', noindex = false }) {
+// ── search engines and link previews ───────────────────────────────────
+// Search results cut descriptions at about 160 characters, so longer ones end at a word.
+function clip(text, max = 158) {
+  const s = String(text || '').replace(/\s+/g, ' ').trim();
+  if (s.length <= max) return s;
+  return `${s.slice(0, max).replace(/\s+\S*$/, '').replace(/[,;:.\s]+$/, '')}…`;
+}
+const abs = (src) => (!src ? '' : /^https?:\/\//.test(src) ? src : `${SITE}${src.startsWith('/') ? '' : '/img/'}${src}`);
+// Structured data (schema.org) lets Google show CLÜSS and its events as rich results.
+const ldScript = (data) => `<script type="application/ld+json">${JSON.stringify({ '@context': 'https://schema.org', ...data }).replace(/</g, '\\u003c')}</script>`;
+const SHARE = { src: `${SITE}/brand/share.png`, w: 1200, h: 630, alt: 'CLÜSS: la asociación de estudiantes hispanohablantes de La Haya' };
+const ORG_REF = { '@type': 'Organization', name: 'CLÜSS', url: `${SITE}/`, logo: `${SITE}/brand/icon-512.png` };
+const ORG = {
+  ...ORG_REF, '@id': `${SITE}/#org`,
+  alternateName: ['CLUSS', 'CLÜSS The Hague', 'Community of Leiden University for Spanish-Speakers'],
+  description: 'The Hague’s Spanish-speaking student association at Leiden University, open to Spanish speakers and anyone who loves Hispanic cultures.',
+  image: SHARE.src, email: L.email,
+  address: { '@type': 'PostalAddress', addressLocality: 'Den Haag', addressRegion: 'Zuid-Holland', addressCountry: 'NL' },
+  areaServed: [{ '@type': 'City', name: 'The Hague' }, { '@type': 'City', name: 'Leiden' }],
+  knowsLanguage: ['es', 'en'],
+  sameAs: [L.instagram, L.tiktok, L.linktree],
+};
+const crumbs = (items) => ({
+  '@type': 'BreadcrumbList',
+  itemListElement: items.map(([name, p], i) => ({ '@type': 'ListItem', position: i + 1, name, item: `${SITE}${p}` })),
+});
+
+function layout({ title, desc, active, body, pathName, suelo = 'dia', head = '', noindex = false, image = null, type = 'website', published = '', ld = [] }) {
   const nav = NAV.map(([h, l, k]) => `<a href="${h}"${k === active ? ' aria-current="page"' : ''} lang="es">${l}</a>`).join('');
-  const fullTitle = title ? `${title} · CLÜSS` : 'CLÜSS · Community of Leiden University for Spanish-Speakers';
-  const ld = pathName === '/' ? `<script type="application/ld+json">${JSON.stringify({ '@context': 'https://schema.org', '@type': 'Organization', name: 'CLÜSS', alternateName: 'Community of Leiden University for Spanish-Speakers', url: SITE, email: L.email, sameAs: [L.instagram, L.tiktok] })}</script>` : '';
+  const fullTitle = title ? `${title} · CLÜSS` : 'CLÜSS · The Hague’s Spanish-speaking student association';
+  const d = clip(desc);
+  const img = image && image.src ? { ...image, src: abs(image.src) } : SHARE;
   return `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>${fullTitle}</title>
-<meta name="description" content="${desc}">${noindex ? '\n<meta name="robots" content="noindex">' : ''}
+<meta name="description" content="${d}">${noindex ? '\n<meta name="robots" content="noindex">' : ''}
 <meta name="theme-color" content="#F6F3EC">
 <link rel="canonical" href="${SITE}${pathName}">
-<meta property="og:type" content="website">
+<meta property="og:type" content="${type}">
 <meta property="og:site_name" content="CLÜSS">
+<meta property="og:locale" content="es_ES">
+<meta property="og:locale:alternate" content="en_GB">
 <meta property="og:title" content="${fullTitle}">
-<meta property="og:description" content="${desc}">
+<meta property="og:description" content="${d}">
 <meta property="og:url" content="${SITE}${pathName}">
-<meta property="og:image" content="${SITE}/img/la-haya.jpg">
+<meta property="og:image" content="${img.src}">${img.w ? `\n<meta property="og:image:width" content="${img.w}">\n<meta property="og:image:height" content="${img.h}">` : ''}
+<meta property="og:image:alt" content="${img.alt || 'CLÜSS'}">${published ? `\n<meta property="article:published_time" content="${published}">` : ''}
+<meta name="twitter:card" content="summary_large_image">
 <link rel="icon" type="image/svg+xml" href="/brand/puntitos-rojo.svg">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="manifest" href="/site.webmanifest">
 <link rel="preload" href="/fonts/unbounded-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/fonts/space-grotesk-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/styles.css">
 <script src="/main.js" defer></script>
 ${DB_META}${head}
-${ld}
+${ld.map(ldScript).join('\n')}
 </head>
 <body class="page-${active}">
 <a class="skip" href="#main">Skip to content</a>
@@ -231,15 +267,56 @@ const fpHome = fingerprint([today, nextEvents[0] || null]);
 const fpEvents = fingerprint([today, nextEvents, pastEvents]);
 const fpPosts = fingerprint(posts);
 
+// Dates for the sitemap: when each page last changed.
+const day = (v) => String(v || '').slice(0, 10);
+const latest = (...dates) => dates.flat().map(day).filter(Boolean).sort().pop() || today;
+let codeDate = '';
+try { codeDate = execSync('git log -1 --format=%cs', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim(); } catch { /* not a git checkout */ }
+codeDate = codeDate || today;
+const postUpdated = Object.fromEntries(postRows.map((r) => [r.slug, latest(r.updated_at, r.published_at)]));
+const eventsDate = latest(codeDate, eventRows.map((r) => r.updated_at), pastEvents.slice(0, 1).map((e) => e.date));
+const lastmod = {
+  '/': eventsDate,
+  '/events/': eventsDate,
+  '/blog/': latest(codeDate, Object.values(postUpdated)),
+  ...Object.fromEntries(posts.map((p) => [`/blog/${p.slug}/`, postUpdated[p.slug] || p.date])),
+};
+
+// Each event as schema.org data, so Google can list it in event search.
+const plain = (v) => String(v || '').replace(/<[^>]*>/g, ' ').replace(/&amp;/g, '&').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
+function hagueTime(date, [h, m]) {
+  const off = new Intl.DateTimeFormat('en', { timeZone: 'Europe/Amsterdam', timeZoneName: 'longOffset' })
+    .formatToParts(new Date(`${date}T${h}:${m}:00Z`)).find((x) => x.type === 'timeZoneName').value.replace('GMT', '');
+  return `${date}T${h}:${m}:00${off || '+00:00'}`;
+}
+function eventLd(e) {
+  const times = [...String(e.time || '').matchAll(/(\d{1,2})[:.](\d{2})/g)].map((x) => [x[1].padStart(2, '0'), x[2]]);
+  const where = plain(e.place) || 'The Hague';
+  const name = plain(e.title) || plain([e.lead, ...(e.cartel || [])].join(' '));
+  return {
+    '@type': 'Event', name,
+    startDate: times[0] ? hagueTime(e.date, times[0]) : e.date,
+    ...(times[1] ? { endDate: hagueTime(e.date, times[1]) } : {}),
+    eventStatus: 'https://schema.org/EventScheduled',
+    eventAttendanceMode: 'https://schema.org/OfflineEventAttendanceMode',
+    location: { '@type': 'Place', name: where, address: { '@type': 'PostalAddress', addressLocality: /leiden/i.test(where) ? 'Leiden' : 'Den Haag', addressCountry: 'NL' } },
+    description: plain(e.en) || plain((e.text || [])[0]) || `${name}: a CLÜSS event.`,
+    image: [e.img ? abs(e.img) : SHARE.src],
+    organizer: ORG_REF,
+    url: `${SITE}/events/`,
+  };
+}
+
 // ── pages ──────────────────────────────────────────────────────────────
 const pages = {};
 
 pages['/'] = () => layout({
   active: 'home', pathName: '/',
-  desc: 'CLÜSS is the Community of Leiden University for Spanish-Speakers: a student-led association in The Hague and Leiden for Spanish speakers and anyone who loves Hispanic cultures, whatever their level of Spanish.',
+  desc: 'CLÜSS is The Hague’s Spanish-speaking student association at Leiden University: events, embassy visits and culture, whatever your level of Spanish.',
+  ld: [ORG, { '@type': 'WebSite', '@id': `${SITE}/#website`, url: `${SITE}/`, name: 'CLÜSS', inLanguage: ['es', 'en'], publisher: { '@id': ORG['@id'] } }, ...nextEvents.slice(0, 1).map(eventLd)],
   body: `
   <section class="hero" data-suelo="dia">
-    <h1 class="sr">CLÜSS: Community of Leiden University for Spanish-Speakers</h1>
+    <h1 class="sr">CLÜSS: The Hague’s Spanish-speaking student association (Community of Leiden University for Spanish-Speakers)</h1>
     <div class="hero-base">
       <div class="hero-txt">
         <div class="hero-logo"><img src="/brand/cluss-rojo.svg" alt="" width="945" height="386" fetchpriority="high"></div>
@@ -310,6 +387,7 @@ pages['/'] = () => layout({
 pages['/about/committees/'] = () => layout({
   title: 'Committees', active: 'committees', pathName: '/about/committees/',
   desc: c.committeesIntro,
+  ld: [crumbs([['Inicio', '/'], ['Comités', '/about/committees/']])],
   body: `
   ${pageHead({ lines: ['4 COMITÉS,', '1 FAMILIA.'], suelo: 'azul', enLine: 'Committees. Find your place.', intro: c.committeesIntro, stickers: mark('chispas', 'blanco', 'cab-chispas') })}
   <section class="comites">
@@ -331,6 +409,7 @@ for (const m of c.committees) {
   pages[`/about/committees/${m.slug}/`] = () => layout({
     title: m.en, active: 'committees', pathName: `/about/committees/${m.slug}/`,
     desc: `${m.tagline} ${m.lead}`,
+    ld: [crumbs([['Inicio', '/'], ['Comités', '/about/committees/'], [m.en, `/about/committees/${m.slug}/`]])],
     body: `
     ${pageHead({ lines: m.cartel, suelo: m.suelo, label: m.es, enLine: m.en, tagline: m.tagline, kicker: 'Comité' })}
     ${m.huellas ? `<div class="huellas-w">${huellas()}</div>` : ''}
@@ -373,7 +452,7 @@ for (const m of c.committees) {
 
 pages['/team/'] = () => layout({
   title: 'Board', active: 'team', pathName: '/team/',
-  desc: c.team.intro,
+  desc: 'Meet the CLÜSS board: the students who lead The Hague’s Spanish-speaking student association at Leiden University.',
   body: `
   ${pageHead({ lines: ['BOARD'], enLine: 'Meet the board', intro: c.team.intro, stickers: sello('CLÜSS ✦ Leiden ✦ The Hague ✦ Familia ✦', 'cab-sello', 'data-spin') })}
   <section class="seccion junta">
@@ -398,7 +477,8 @@ pages['/team/'] = () => layout({
 });
 
 pages['/events/'] = () => layout({
-  title: 'Events', active: 'events', pathName: '/events/',
+  title: 'Events in The Hague', active: 'events', pathName: '/events/',
+  ld: [...nextEvents, ...pastEvents].map(eventLd),
   desc: 'Upcoming and past CLÜSS events: embassy visits, cultural celebrations, parties, tournaments and more, in The Hague and Leiden.',
   body: `
   ${pageHead({ lines: ['EVEN', 'TOS'], enLine: 'Events' })}
@@ -421,7 +501,7 @@ pages['/events/'] = () => layout({
 
 pages['/join-us/'] = () => layout({
   title: 'Join us', active: 'join', pathName: '/join-us/',
-  desc: c.join.intro,
+  desc: `Join CLÜSS. ${c.join.intro}`,
   body: `
   <section class="cabecera unete" data-suelo="rojo">
     <div class="cabecera-in">
@@ -519,6 +599,14 @@ for (const p of posts) {
   pages[`/blog/${p.slug}/`] = () => layout({
     title: esc(p.title), active: 'blog', pathName: `/blog/${p.slug}/`,
     desc: esc(p.excerpt || p.title),
+    type: 'article', published: p.date,
+    image: p.cover ? { src: p.cover, alt: esc(p.coverAlt || p.title) } : null,
+    ld: [{
+      '@type': 'BlogPosting', headline: p.title.slice(0, 110), description: p.excerpt || undefined,
+      datePublished: p.date, dateModified: postUpdated[p.slug] || p.date,
+      author: p.author ? { '@type': 'Person', name: p.author } : ORG_REF, publisher: ORG_REF,
+      image: [p.cover ? abs(p.cover) : SHARE.src], mainEntityOfPage: `${SITE}/blog/${p.slug}/`,
+    }, crumbs([['Inicio', '/'], ['Blog', '/blog/'], [p.title, `/blog/${p.slug}/`]])],
     body: postArticle(p),
   });
 }
@@ -562,8 +650,8 @@ for (const [route, render] of Object.entries(pages)) {
 }
 fs.writeFileSync(path.join(OUT, '404.html'), page404());
 
-const urls = Object.keys(pages).filter((r) => r !== '/miembros/').map((r) => `<url><loc>${SITE}${r}</loc></url>`).join('');
-fs.writeFileSync(path.join(OUT, 'sitemap.xml'), `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls}</urlset>`);
+const urls = Object.keys(pages).filter((r) => r !== '/miembros/').map((r) => `<url><loc>${SITE}${r}</loc><lastmod>${lastmod[r] || codeDate}</lastmod></url>`).join('\n');
+fs.writeFileSync(path.join(OUT, 'sitemap.xml'), `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>\n`);
 fs.writeFileSync(path.join(OUT, 'robots.txt'), `User-agent: *\nAllow: /\nSitemap: ${SITE}/sitemap.xml\n`);
 
 // Old Google Sites addresses keep working. Plain redirect pages work on any host.
