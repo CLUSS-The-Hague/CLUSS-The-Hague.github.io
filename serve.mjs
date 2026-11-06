@@ -4,9 +4,9 @@ import http from 'node:http';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
-const root = path.resolve('dist');
+const root = path.resolve(process.env.SITE_DIR || 'dist');
 const port = Number(process.env.PORT || 4321);
-const types = { '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.js': 'text/javascript', '.svg': 'image/svg+xml', '.jpg': 'image/jpeg', '.png': 'image/png', '.woff2': 'font/woff2', '.txt': 'text/plain', '.xml': 'application/xml', '.json': 'application/json' };
+const types = { '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.js': 'text/javascript', '.mjs': 'text/javascript', '.svg': 'image/svg+xml', '.jpg': 'image/jpeg', '.png': 'image/png', '.woff2': 'font/woff2', '.txt': 'text/plain', '.xml': 'application/xml', '.json': 'application/json' };
 
 async function read(file) {
   const stat = await fs.stat(file);

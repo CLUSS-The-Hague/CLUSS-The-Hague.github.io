@@ -16,6 +16,13 @@
   burger?.addEventListener('click', () => setMenu(menu.hidden));
   addEventListener('keydown', (e) => { if (e.key === 'Escape' && menu && !menu.hidden) { setMenu(false); burger.focus(); } });
 
+  // ── "Iniciar sesión" becomes "Área de miembros" for people already signed in ──
+  try {
+    if (Object.keys(localStorage).some((k) => /^sb-.+-auth-token$/.test(k))) {
+      for (const a of $$('[data-sesion]')) a.textContent = 'Área de miembros';
+    }
+  } catch { /* storage blocked: keep the default label */ }
+
   // ── top bar steps aside on the way down ────────────────
   let last = scrollY;
 

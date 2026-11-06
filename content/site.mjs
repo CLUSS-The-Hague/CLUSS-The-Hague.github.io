@@ -18,6 +18,15 @@ export const links = {
   calendarOpen: 'https://calendar.google.com/calendar/u/0?cid=Y2x1c3N0aGVoYWd1ZUBnbWFpbC5jb20',
 };
 
+// Members area, and events and blog posts written there.
+// Paste the two values from Supabase → Project Settings → API (see README.md, "Members area").
+// Use the publishable key (sb_publishable_…), which is meant to be public. Never paste a secret key here.
+// While these are empty, the members area shows "not connected" and the events below in this file are used.
+export const backend = {
+  url: 'https://ywsgshtifxehdzklfqiv.supabase.co',
+  anonKey: 'sb_publishable_qXCDdXJIp2aMekyUTrFIJw_qwlBu8Ul',
+};
+
 export const home = {
   statement: 'La asociación de estudiantes hispanohablantes de La Haya.',
   statementEn: 'The Hague’s Spanish-speaking student association.',
@@ -40,20 +49,6 @@ export const partners = [
   { name: 'Picasso', img: 'partners/picasso.jpg', bg: '#000000' },
   { name: 'La Patrona, Cantina Mexicana', img: 'partners/la-patrona.jpg', bg: '#ffffff' },
 ];
-
-export const about = {
-  intro: 'The meeting point for Spanish-speaking culture, academia, and talent in the Netherlands.',
-  who: [
-    'CLÜSS is a student-led community at Leiden University that brings together Spanish-speaking students and those interested in Hispanic cultures across Leiden and The Hague.',
-    'We create a space for connection, cultural exchange, and academic growth within an inclusive university environment.',
-  ],
-  mission: [
-    'Build a strong Spanish-speaking community',
-    'Promote cultural visibility and exchange',
-    'Foster academic and professional development',
-  ],
-  committeesTeaser: 'Discover the structure behind CLÜSS and how we bring the community to life.',
-};
 
 export const committeesIntro = 'Our committees are the driving force behind CLÜSS. Each one contributes to creating a dynamic, supportive, and engaging experience for our members.';
 
@@ -183,8 +178,8 @@ export const team = {
   join: 'Interested in getting involved? CLÜSS is always looking for enthusiastic students to contribute their ideas and talents. Whether you’re passionate about events, writing, sports, photography, or community building, there’s a place for you.',
 };
 
-// Events sort themselves: a date in the future shows as "next", a past date
-// moves to "past" the next time the site is built.
+// Events sort themselves: a date in the future shows as "next", a past date moves to "past".
+// Once the members area is connected, events are managed there instead and this list is only a fallback.
 export const events = [
   {
     date: '2026-11-13',

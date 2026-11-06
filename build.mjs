@@ -2,23 +2,16 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import * as c from './content/site.mjs';
+import {
+  PUNTITOS, COMITE, esc, en, mark, ext, btn, tag, titular, lista, cartel, fotoTag,
+  splitEvents, eventPoster, pastEvent, noNextEvents, normPost, postCard, postArticle, noPosts, fingerprint, todayInHague,
+} from './src/render.mjs';
 
 const OUT = 'dist';
 const SITE = 'https://www.cluss.nl';
 const { links: L } = c;
 
-// ── the real Ü dots, from the design system's sello giratorio ──────────
-const PUNTITOS = 'M23.4,7.3C20.9,7.7 18.2,8.4 16.0,9.8C13.8,11.0 11.7,12.9 10.2,15.0C8.8,17.1 7.7,19.7 7.4,22.2C7.0,24.7 7.2,27.5 7.8,30.0C8.4,32.5 9.5,35.1 11.0,37.1C12.5,39.2 14.6,41.1 16.7,42.4C18.9,43.8 21.5,44.9 24.0,45.2C26.6,45.4 29.4,45.2 31.8,44.3C34.1,43.4 36.6,41.9 38.3,40.1C40.1,38.3 41.6,35.8 42.5,33.4C43.4,31.1 43.9,28.3 43.8,25.7C43.8,23.2 43.4,20.4 42.4,18.0C41.5,15.7 39.9,13.3 38.0,11.6C36.2,9.9 33.7,8.5 31.2,7.8C28.9,7.1 26.0,7.0 23.4,7.3ZM71.8,7.2C69.3,7.5 66.6,8.5 64.5,9.9C62.4,11.3 60.5,13.4 59.2,15.5C57.9,17.8 57.1,20.4 56.7,23.0C56.3,25.5 56.3,28.3 56.8,30.8C57.3,33.3 58.2,36.0 59.7,38.0C61.0,40.2 63.1,42.2 65.3,43.4C67.5,44.7 70.3,45.2 72.8,45.4C75.4,45.5 78.2,45.2 80.6,44.3C83.0,43.4 85.4,42.0 87.2,40.2C89.1,38.5 90.7,36.1 91.6,33.7C92.5,31.4 93.0,28.6 92.9,26.1C92.8,23.5 91.9,20.8 90.8,18.5C89.7,16.2 88.2,13.9 86.3,12.1C84.5,10.4 82.0,8.9 79.7,8.1C77.2,7.2 74.4,7.0 71.8,7.2Z';
-
-// ── small pieces ───────────────────────────────────────────────────────
-const es = (t) => `<span lang="es">${t}</span>`;
-const en = (t, cls = '') => `<p class="traduccion ${cls}"><span aria-hidden="true">EN → </span>${t}</p>`;
-const mark = (name, color = 'rojo', cls = '') => `<img class="mark ${cls}" src="/brand/${name}-${color}.svg" alt="" aria-hidden="true" loading="lazy">`;
-const ext = (href) => (/^https?:|^mailto:/.test(href) ? ' target="_blank" rel="noopener"' : '');
-const btn = (href, label, kind = '') => `<a class="btn ${kind}" href="${href}"${ext(href)}>${label}<span aria-hidden="true" class="btn-a">→</span></a>`;
-const tag = (kind, label) => `<span class="comite ${kind}"><i></i>${label}</span>`;
-const COMITE = { academic: 'Academic', social: 'Events &amp; Culture', media: 'Communication &amp; Media', sport: 'Sports' };
-
+// ── small pieces only the build needs (the rest are in src/render.mjs) ──
 let selloN = 0;
 function sello(text, cls = '', extra = '') {
   const id = `sg-${++selloN}`;
@@ -32,41 +25,16 @@ function cinta(words, cls = '') {
   return `<div class="cinta ${cls}" aria-hidden="true"><div class="cinta-track">${run.repeat(6)}</div></div>`;
 }
 
+// Local photos from public/img. A missing file shows a placeholder instead of a broken image.
 function foto(file, alt, cls = '', opts = {}) {
-  const exists = fs.existsSync(path.join('public/img', file));
-  if (!exists) {
+  if (!fs.existsSync(path.join('public/img', file))) {
     const initials = (opts.name || '').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('');
     return `<figure class="foto vacia ${cls}"><div class="foto-in"><svg viewBox="0 0 100 52" aria-hidden="true"><path d="${PUNTITOS}"/></svg>${initials ? `<b>${initials}</b>` : ''}<span>Foto pronto</span></div></figure>`;
   }
-  return `<figure class="foto ${cls}"><div class="foto-in"><img src="/img/${file}" alt="${alt}" loading="${opts.eager ? 'eager' : 'lazy'}" decoding="async"></div>${opts.cap ? `<figcaption>${opts.cap}</figcaption>` : ''}</figure>`;
+  return fotoTag(`/img/${file}`, alt, cls, opts);
 }
 
-// Big poster type. Lines are split by hand, like the posts ("CLÁ / SICO").
-// With `join`, the word runs on one line on wide screens and splits on phones.
-// The size itself is capped in styles.css (.cartel), by screen width and height.
-function cartel(lines, { cls = '', tagName = 'h1', label, join = false } = {}) {
-  const longest = Math.max(...lines.map((l) => [...l].length));
-  const total = lines.reduce((sum, l) => sum + [...l].length, 0);
-  const aria = label ? ` aria-label="${label}"` : '';
-  return `<${tagName} class="cartel ${join ? 'unida' : ''} ${cls}" style="--n:${join ? total : longest};--n-m:${longest}" lang="es"${aria}>${lines.map((l) => `<span>${l}</span>`).join('')}</${tagName}>`;
-}
-
-const titular = (text, tagName = 'h2', cls = '') => `<${tagName} class="titular ${cls}" lang="es">${text}</${tagName}>`;
-
-const lista = (items, cls = '') => `<ul class="lista ${cls}">${items.map((i) => `<li><svg viewBox="0 0 100 52" aria-hidden="true"><path d="${PUNTITOS}"/></svg><span>${i}</span></li>`).join('')}</ul>`;
-
-function ticketFacts(ev) {
-  return `<div class="ticket" data-suelo="${ev.paper || 'noche'}" style="--notch:${ev.notch || 'var(--blanco)'}">
-    <dl class="ticket-cuerpo">
-      <div><dt>Día</dt><dd>${ev.day}</dd></div>
-      <div><dt>Hora</dt><dd>${ev.time}</dd></div>
-      <div><dt>Sitio</dt><dd>${ev.place}</dd></div>
-    </dl>
-    <div class="talon"><span>${ev.talon || COMITE[ev.committee] || 'CLÜSS'}</span></div>
-  </div>`;
-}
-
-const FLAG_CHILE = `<div class="flag-peg" role="img" aria-label="Bandera de Chile"><svg viewBox="0 0 200 200"><polygon points="196,100 177,121 183,148 157,157 148,183 121,177 100,196 79,177 52,183 43,157 17,148 23,121 4,100 23,79 17,52 43,43 52,17 79,23 100,4 121,23 148,17 157,43 183,52 177,79" fill="#E8322B"/><g transform="rotate(6 100 100)"><rect x="32" y="52" width="136" height="96" rx="4" fill="#F6F3EC" stroke="#111111" stroke-width="2"/><rect x="40" y="60" width="120" height="40" fill="#F6F3EC"/><rect x="40" y="100" width="120" height="40" fill="#E8322B"/><rect x="40" y="60" width="40" height="40" fill="#2B3FE0"/><polygon points="60,67 63.06,75.79 72.36,75.98 64.95,81.61 67.64,90.52 60,85.2 52.36,90.52 55.05,81.61 47.64,75.98 56.94,75.79" fill="#F6F3EC"/><rect x="40" y="60" width="120" height="80" fill="none" stroke="#111111" stroke-width="1.5"/></g></svg></div>`;
+const es = (t) => `<span lang="es">${t}</span>`;
 
 // la trama de puntitos: a halftone disc, moon or disco ball
 function trama(size = 600, step = 20) {
@@ -100,14 +68,14 @@ function huellas(w = 1200, h = 200, steps = 15) {
 // ── chrome ─────────────────────────────────────────────────────────────
 const NAV = [
   ['/', 'Inicio', 'home'],
-  ['/about/', 'Nosotros', 'about'],
   ['/about/committees/', 'Comités', 'committees'],
-  ['/team/', 'Equipo', 'team'],
+  ['/team/', 'Board', 'team'],
   ['/events/', 'Eventos', 'events'],
+  ['/blog/', 'Blog', 'blog'],
   ['/contact/', 'Contacto', 'contact'],
 ];
 
-function layout({ title, desc, active, body, pathName, suelo = 'dia' }) {
+function layout({ title, desc, active, body, pathName, suelo = 'dia', head = '', noindex = false }) {
   const nav = NAV.map(([h, l, k]) => `<a href="${h}"${k === active ? ' aria-current="page"' : ''} lang="es">${l}</a>`).join('');
   const fullTitle = title ? `${title} · CLÜSS` : 'CLÜSS · Community of Leiden University for Spanish-Speakers';
   const ld = pathName === '/' ? `<script type="application/ld+json">${JSON.stringify({ '@context': 'https://schema.org', '@type': 'Organization', name: 'CLÜSS', alternateName: 'Community of Leiden University for Spanish-Speakers', url: SITE, email: L.email, sameAs: [L.instagram, L.tiktok] })}</script>` : '';
@@ -117,7 +85,7 @@ function layout({ title, desc, active, body, pathName, suelo = 'dia' }) {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>${fullTitle}</title>
-<meta name="description" content="${desc}">
+<meta name="description" content="${desc}">${noindex ? '\n<meta name="robots" content="noindex">' : ''}
 <meta name="theme-color" content="#F6F3EC">
 <link rel="canonical" href="${SITE}${pathName}">
 <meta property="og:type" content="website">
@@ -131,6 +99,7 @@ function layout({ title, desc, active, body, pathName, suelo = 'dia' }) {
 <link rel="preload" href="/fonts/space-grotesk-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/styles.css">
 <script src="/main.js" defer></script>
+${DB_META}${head}
 ${ld}
 </head>
 <body class="page-${active}">
@@ -138,11 +107,12 @@ ${ld}
 <header class="top" data-top>
   <a class="top-logo" href="/" aria-label="CLÜSS, home"><img src="/brand/cluss-rojo.svg" alt="CLÜSS" width="945" height="386"></a>
   <nav class="top-nav" aria-label="Main">${nav}</nav>
+  <a class="btn linea btn-sesion" href="/miembros/" lang="es" data-sesion${active === 'members' ? ' aria-current="page"' : ''}>Iniciar sesión</a>
   <a class="btn btn-top${active === 'join' ? ' is-here' : ''}" href="/join-us/" lang="es">Únete</a>
   <button class="burger" type="button" aria-expanded="false" aria-controls="menu" data-burger><span class="sr">Menu</span><i></i><i></i></button>
 </header>
 <div class="menu" id="menu" data-suelo="rojo" hidden>
-  <nav aria-label="Mobile">${NAV.map(([h, l, k]) => `<a href="${h}"${k === active ? ' aria-current="page"' : ''} lang="es">${l}</a>`).join('')}<a href="/join-us/" lang="es">Únete</a></nav>
+  <nav aria-label="Mobile"><a href="/miembros/" class="menu-sesion" lang="es" data-sesion>Iniciar sesión</a>${NAV.map(([h, l, k]) => `<a href="${h}"${k === active ? ' aria-current="page"' : ''} lang="es">${l}</a>`).join('')}<a href="/join-us/" lang="es">Únete</a></nav>
 </div>
 <main id="main" data-suelo="${suelo}">
 ${body}
@@ -169,6 +139,7 @@ ${body}
       <a href="${L.tiktok}" target="_blank" rel="noopener">TikTok</a>
       <a href="${L.whatsapp}" target="_blank" rel="noopener">WhatsApp community</a>
       <a href="${L.linktree}" target="_blank" rel="noopener">Linktree</a>
+      <a href="/miembros/" lang="es">Área de miembros</a>
     </div>
   </div>
   <img class="pie-logo" src="/brand/cluss-blanco.svg" alt="CLÜSS" loading="lazy">
@@ -226,35 +197,39 @@ function calendarBlock() {
   </section>`;
 }
 
-// ── events logic ───────────────────────────────────────────────────────
-const today = new Date().toISOString().slice(0, 10);
-const nextEvents = c.events.filter((e) => e.date >= today).sort((a, b) => a.date.localeCompare(b.date));
-const pastEvents = c.events.filter((e) => e.date < today).sort((a, b) => b.date.localeCompare(a.date));
+// ── events and posts ───────────────────────────────────────────────────
+// With the members area connected, published events and posts come from the database.
+// Without it (or if it can't be reached during the build), the events in content/site.mjs are used.
+// CLUSS_DB_URL and CLUSS_DB_KEY override content/site.mjs, which is handy for testing.
+const backend = process.env.CLUSS_DB_URL ? { url: process.env.CLUSS_DB_URL, anonKey: process.env.CLUSS_DB_KEY || '' } : c.backend;
+const DB = backend && backend.url && backend.anonKey ? backend : null;
+const DB_META = DB ? `<meta name="cluss-db" content="${esc(DB.url)}|${esc(DB.anonKey)}">\n<script type="module" src="/live.js"></script>\n` : '';
 
-function eventPoster(ev, { paper = 'dia', notch = 'var(--cobalto)', headTag = 'h2', suelo = 'azul', moreLink = true, showText = false } = {}) {
-  const lines = ev.cartel || ev.title.toUpperCase().split(' ').slice(0, 2);
-  return `<section class="evento" data-suelo="${suelo}">
-    <div class="evento-in">
-      ${ev.lead ? `<p class="subtitular evento-lead" lang="es">${ev.lead}</p>` : ''}
-      ${cartel(lines, { join: true, tagName: headTag, label: `${ev.lead || ''} ${lines.join('')} ${ev.cartelSmall || ''}`.trim() })}
-      <div class="evento-fila">
-        ${ev.cartelSmall ? `<p class="evento-small" lang="es" aria-hidden="true"><span class="sub-mark">${ev.cartelSmall}${mark('subrayado', suelo === 'azul' ? 'blanco' : 'rojo', 'draw wipe')}</span></p>` : ''}
-        ${ev.flag === 'chile' ? FLAG_CHILE : ''}
-      </div>
-      <div class="evento-base">
-        <div class="evento-txt">
-          ${ev.en ? en(ev.en) : ''}
-          ${ev.committee ? tag(ev.committee, COMITE[ev.committee]) : ''}
-          ${showText && ev.text ? ev.text.map((t) => `<p>${t}</p>`).join('') : ''}
-          ${ev.register ? `<div class="fila-btn">${btn(ev.register, 'Apúntate', 'papel')}</div>` : ''}
-          ${showText && !ev.register ? `<div class="fila-btn">${btn(L.instagram, 'Instagram', 'papel')}</div>` : ''}
-          ${moreLink ? `<div class="fila-btn">${btn('/events/', 'Todos los eventos', 'papel')}</div>` : ''}
-        </div>
-        ${ticketFacts({ ...ev, paper, notch, talon: ev.talon })}
-      </div>
-    </div>
-  </section>`;
+async function fromDb(table, query) {
+  const res = await fetch(`${DB.url}/rest/v1/${table}?${query}`, { headers: { apikey: DB.anonKey } });
+  if (!res.ok) throw new Error(`${table}: ${res.status} ${await res.text()}`);
+  return res.json();
 }
+
+let eventRows = c.events;
+let postRows = [];
+if (DB) {
+  try {
+    eventRows = await fromDb('events', 'select=*&status=eq.published&order=date.asc');
+    postRows = await fromDb('posts', 'select=*&status=eq.published&order=published_at.desc');
+  } catch (err) {
+    console.warn(`Could not read the members database, using content/site.mjs instead. ${err.message}`);
+    eventRows = c.events;
+    postRows = [];
+  }
+}
+const today = todayInHague();
+const { next: nextEvents, past: pastEvents } = splitEvents(eventRows, today);
+const posts = postRows.map(normPost);
+// The live script redraws a block only when its fingerprint differs from the one built here.
+const fpHome = fingerprint([today, nextEvents[0] || null]);
+const fpEvents = fingerprint([today, nextEvents, pastEvents]);
+const fpPosts = fingerprint(posts);
 
 // ── pages ──────────────────────────────────────────────────────────────
 const pages = {};
@@ -283,7 +258,7 @@ pages['/'] = () => layout({
     ${cinta(['Conoce gente', 'Celebra la cultura', 'Practica español', 'Ven a los eventos'], 'c1')}
     ${cinta(['La Haya', 'Leiden', 'Familia', 'Hables mucho o poco'], 'c2 cobalto rev')}
   </div>
-  ${nextEvents[0] ? eventPoster(nextEvents[0]) : ''}
+  <div data-live="home-event" data-fp="${fpHome}">${nextEvents[0] ? eventPoster(nextEvents[0]) : ''}</div>
   <section class="seccion quienes">
     <div class="wrap quienes-grid">
       <div class="quienes-a">
@@ -297,7 +272,7 @@ pages['/'] = () => layout({
       </div>
       <div class="quienes-b prosa">
         ${c.home.about.map((p) => `<p>${p}</p>`).join('')}
-        ${btn('/about/', 'Leer más')}
+        ${btn('/team/', 'Conoce al Board')}
       </div>
     </div>
   </section>
@@ -330,53 +305,6 @@ pages['/'] = () => layout({
       ${sello('Conoce gente ✦ Practica español ✦ Ven ✦', 'negro comunidad-sello', 'data-spin')}
     </div>
   </section>`,
-});
-
-pages['/about/'] = () => layout({
-  title: 'About', active: 'about', pathName: '/about/',
-  desc: c.about.intro,
-  body: `
-  ${pageHead({ lines: ['NOSO', 'TROS'], enLine: 'About CLÜSS. Community of Leiden University for Spanish-Speakers.', tagline: c.about.intro, stickers: sello('CLÜSS ✦ Leiden ✦ The Hague ✦ Familia ✦', 'cab-sello', 'data-spin') })}
-  <section class="seccion">
-    <div class="wrap dos">
-      <div>
-        <h2 class="titular grande" lang="es">¿quiénes <span class="lazo-w">somos?${mark('lazo', 'rojo', 'draw sweep lazo-m')}</span></h2>
-        ${en('Who we are')}
-      </div>
-      <div class="prosa">
-        ${c.about.who.map((p) => `<p>${p}</p>`).join('')}
-        ${btn('/team/', 'Conoce al equipo')}
-      </div>
-    </div>
-  </section>
-  <section class="seccion mision" data-suelo="azul">
-    <div class="wrap">
-      ${titular('misión y objetivos.')}
-      ${en('Mission &amp; objectives')}
-      <ul class="mision-l">
-        ${c.about.mission.map((m) => `<li>${mark('estrella', 'blanco')}<span>${m}</span></li>`).join('')}
-      </ul>
-    </div>
-  </section>
-  <section class="seccion">
-    <div class="wrap dos">
-      <div>
-        ${titular('4 comités,<br>1 familia.')}
-        ${en('Committees &amp; activities')}
-      </div>
-      <div class="prosa">
-        <p>${c.about.committeesTeaser}</p>
-        ${btn('/about/committees/', 'Ver los comités')}
-      </div>
-    </div>
-  </section>
-  <section class="fotos-tira">
-    ${foto('la-haya.jpg', 'The Hague at sunset', 't1')}
-    ${foto('campus-spui.jpg', 'Leiden University’s Spui campus building in The Hague', 't2')}
-    ${foto('canal.jpg', 'A Dutch canal at dusk', 't3')}
-    ${foto('clase.jpg', 'Students in a lecture hall', 't4')}
-  </section>
-  ${askBlock({})}`,
 });
 
 pages['/about/committees/'] = () => layout({
@@ -444,10 +372,10 @@ for (const m of c.committees) {
 }
 
 pages['/team/'] = () => layout({
-  title: 'Team', active: 'team', pathName: '/team/',
+  title: 'Board', active: 'team', pathName: '/team/',
   desc: c.team.intro,
   body: `
-  ${pageHead({ lines: ['EQUI', 'PO'], enLine: 'Meet the team', intro: c.team.intro, stickers: sello('CLÜSS ✦ Leiden ✦ The Hague ✦ Familia ✦', 'cab-sello', 'data-spin') })}
+  ${pageHead({ lines: ['BOARD'], enLine: 'Meet the board', intro: c.team.intro, stickers: sello('CLÜSS ✦ Leiden ✦ The Hague ✦ Familia ✦', 'cab-sello', 'data-spin') })}
   <section class="seccion junta">
     <div class="wrap">
       ${titular('la junta.')}
@@ -475,22 +403,13 @@ pages['/events/'] = () => layout({
   body: `
   ${pageHead({ lines: ['EVEN', 'TOS'], enLine: 'Events' })}
   <section class="seccion prox-h"><div class="wrap">${titular('próximos eventos.')}${en('Next events')}</div></section>
-  ${nextEvents.length ? nextEvents.map((ev) => eventPoster(ev, { moreLink: false, showText: true, headTag: 'h3' })).join('') : `<section class="seccion"><div class="wrap prosa"><p>Nothing is announced right now. Check the calendar below or follow @clussthehague.</p></div></section>`}
+  <div data-live="next-events" data-fp="${fpEvents}">${nextEvents.length ? nextEvents.map((ev) => eventPoster(ev, { moreLink: false, showText: true, headTag: 'h3', instagram: L.instagram })).join('') : noNextEvents}</div>
   ${calendarBlock()}
   <section class="seccion pasados" data-suelo="noche">
     <div class="wrap">
       ${titular('eventos pasados.')}
       ${en('Past events')}
-      ${pastEvents.map((ev) => `<article class="pasado">
-        ${ev.img ? foto(ev.img, ev.imgAlt || ev.title, 'pasado-f', { cap: ev.imgCap }) : ''}
-        <div class="pasado-t">
-          <p class="dato">${ev.day} · ${ev.place}</p>
-          <h3 class="medio titular">${ev.title}</h3>
-          ${ev.text.map((t) => `<p>${t}</p>`).join('')}
-          ${ev.list ? `<p>${ev.listTitle}</p>${lista(ev.list)}` : ''}
-          ${ev.article ? `<div class="pasado-art"><p>${ev.article.source} wrote about this visit: “${ev.article.title}”.</p>${btn(ev.article.href, 'Leer el artículo', 'papel')}</div>` : ''}
-        </div>
-      </article>`).join('')}
+      <div data-live="past-events" data-fp="${fpEvents}">${pastEvents.map(pastEvent).join('')}</div>
       <div class="galeria">
         ${c.pastPhotos.map((p, i) => foto(p.img, p.alt, `g${i + 1}`)).join('')}
       </div>
@@ -583,10 +502,47 @@ pages['/contact/'] = () => layout({
   ${askBlock({ title: 'hablemos.', enLine: c.contact.outro, href: L.joinGeneral, label: 'Únete' })}`,
 });
 
+pages['/blog/'] = () => layout({
+  title: 'Blog', active: 'blog', pathName: '/blog/',
+  desc: 'News, stories and recaps from CLÜSS, the Spanish-speaking student association in The Hague.',
+  body: `
+  ${pageHead({ lines: ['BLOG'], enLine: 'Stories, news and recaps from CLÜSS.' })}
+  <section class="seccion blog">
+    <div class="wrap">
+      <div class="entradas" data-live="posts" data-fp="${fpPosts}">${posts.length ? posts.map(postCard).join('') : noPosts}</div>
+    </div>
+  </section>
+  ${askBlock({ title: '¿quieres escribir?', enLine: 'Active members can write for the blog from the members area.', href: '/miembros/', label: 'Área de miembros' })}`,
+});
+
+for (const p of posts) {
+  pages[`/blog/${p.slug}/`] = () => layout({
+    title: esc(p.title), active: 'blog', pathName: `/blog/${p.slug}/`,
+    desc: esc(p.excerpt || p.title),
+    body: postArticle(p),
+  });
+}
+
+pages['/miembros/'] = () => layout({
+  title: 'Área de miembros', active: 'members', pathName: '/miembros/', noindex: true,
+  desc: 'Private area for CLÜSS active members.',
+  head: DB ? '<script src="/vendor/supabase.js" defer></script>\n<script type="module" src="/miembros.js"></script>' : '',
+  body: `<div class="miembros" id="app" data-configured="${DB ? 'yes' : 'no'}">
+    <section class="cabecera" data-suelo="dia"><div class="cabecera-in">
+      <p class="micro cabecera-k">CLÜSS</p>
+      ${cartel(['MIEM', 'BROS'], { label: 'Área de miembros', join: true })}
+      <div class="cabecera-sub">${en('Members area')}
+        <p class="cuerpo">${DB ? 'Loading…' : 'The members area is not connected yet. See README.md, “Members area”.'}</p>
+      </div>
+    </div></section>
+  </div>`,
+});
+
 const page404 = () => layout({
   title: 'Not found', active: 'none', pathName: '/404.html',
   desc: 'This page does not exist.',
-  body: `<section class="cabecera perdido" data-suelo="noche"><div class="cabecera-in">
+  // A blog post published after the last build has no page yet; the live script draws it here.
+  body: `<div data-live="post"></div><section class="cabecera perdido" data-suelo="noche" data-perdido><div class="cabecera-in">
     ${cartel(['AQUÍ', 'NADA.'], { label: 'Aquí nada', join: true })}
     <div class="cabecera-sub">${en('This page does not exist. Some of our old links moved when we left Google Sites.')}
     <div class="fila-btn">${btn('/', 'Volver al inicio', 'papel')}</div></div>
@@ -597,8 +553,7 @@ const page404 = () => layout({
 fs.rmSync(OUT, { recursive: true, force: true });
 fs.mkdirSync(OUT, { recursive: true });
 fs.cpSync('public', OUT, { recursive: true });
-fs.copyFileSync('src/styles.css', path.join(OUT, 'styles.css'));
-fs.copyFileSync('src/main.js', path.join(OUT, 'main.js'));
+for (const f of ['styles.css', 'main.js', 'render.mjs', 'live.js', 'miembros.js']) fs.copyFileSync(path.join('src', f), path.join(OUT, f));
 
 for (const [route, render] of Object.entries(pages)) {
   const dir = path.join(OUT, route);
@@ -607,14 +562,15 @@ for (const [route, render] of Object.entries(pages)) {
 }
 fs.writeFileSync(path.join(OUT, '404.html'), page404());
 
-const urls = Object.keys(pages).map((r) => `<url><loc>${SITE}${r}</loc></url>`).join('');
+const urls = Object.keys(pages).filter((r) => r !== '/miembros/').map((r) => `<url><loc>${SITE}${r}</loc></url>`).join('');
 fs.writeFileSync(path.join(OUT, 'sitemap.xml'), `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls}</urlset>`);
 fs.writeFileSync(path.join(OUT, 'robots.txt'), `User-agent: *\nAllow: /\nSitemap: ${SITE}/sitemap.xml\n`);
 
 // Old Google Sites addresses keep working. Plain redirect pages work on any host.
 const oldUrls = [
   ['/inicio', '/'],
-  ['/about-clüss', '/about/'],
+  ['/about', '/'],
+  ['/about-clüss', '/'],
   ['/about-clüss/committees', '/about/committees/'],
   ...c.committees.map((m) => [`/about-clüss/committees/${m.slug}`, `/about/committees/${m.slug}/`]),
   ['/about-clüss/committees/journal-and-media-committee', '/about/committees/communication-and-media-committee/'],
@@ -626,4 +582,4 @@ for (const [from, to] of oldUrls) {
   fs.writeFileSync(path.join(dir, 'index.html'), `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>CLÜSS</title><meta name="robots" content="noindex"><link rel="canonical" href="${SITE}${to}"><meta http-equiv="refresh" content="0; url=${to}"></head><body><a href="${to}">This page has moved.</a></body></html>`);
 }
 
-console.log(`Built ${Object.keys(pages).length + 1} pages into ${OUT}/ (next: ${nextEvents.length}, past: ${pastEvents.length})`);
+console.log(`Built ${Object.keys(pages).length + 1} pages into ${OUT}/ (events from ${DB && eventRows !== c.events ? 'database' : 'content/site.mjs'}; next: ${nextEvents.length}, past: ${pastEvents.length}, posts: ${posts.length})`);
