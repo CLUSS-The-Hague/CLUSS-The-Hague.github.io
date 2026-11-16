@@ -53,11 +53,11 @@ const noticeHtml = () => S.notice
   ? `<div class="m-aviso ${S.notice.kind}" data-notice role="status">${esc(S.notice.text)}<button type="button" class="m-x" data-act="close-notice" aria-label="Cerrar">×</button></div>`
   : '<div data-notice role="status"></div>';
 
-const head = (title, enLine, extra = '') => `
+const head = (title, sub, extra = '') => `
   <section class="cabecera m-cab" data-suelo="dia"><div class="cabecera-in">
     <p class="micro cabecera-k">Área de miembros</p>
     <h1 class="titular grande" lang="es">${title}</h1>
-    <p class="traduccion"><span aria-hidden="true">EN → </span>${enLine}</p>
+    ${sub ? `<p class="cuerpo m-sub">${sub}</p>` : ''}
     ${extra}
   </div></section>`;
 
@@ -85,7 +85,7 @@ async function uploadImage(file, folder) {
 // ── sign in ───────────────────────────────────────────────────────────
 function loginView(sentTo = '') {
   app.innerHTML = `
-    ${head('entra.', 'Sign in with the email the board has on the members list.')}
+    ${head('entra.', 'Entra con el correo que la junta tiene en la lista de miembros.')}
     <section class="seccion m-login"><div class="wrap">
       ${noticeHtml()}
       ${sentTo ? `
@@ -130,7 +130,7 @@ async function render() {
       <div>
         <p class="micro cabecera-k">Área de miembros</p>
         <h1 class="titular grande" lang="es">hola, ${esc((S.me.name || S.me.email).split(' ')[0].toLowerCase())}.</h1>
-        <p class="traduccion"><span aria-hidden="true">EN → </span>Members area · ${esc(ROLE_LABEL[S.me.role])}</p>
+        <p class="cuerpo m-rol">${esc(ROLE_LABEL[S.me.role])}</p>
       </div>
       <div class="m-acciones">
         <a class="btn" href="/miembros/firmas/">Firmas de correo<span aria-hidden="true" class="btn-a">→</span></a>

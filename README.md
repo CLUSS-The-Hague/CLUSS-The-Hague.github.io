@@ -6,6 +6,8 @@ The website at https://www.cluss.nl. It is a plain static site with no dependenc
 
 Most text lives in one file: **`content/site.mjs`**. Team, committees, FAQ and links are all there.
 
+The public site is built twice: in Spanish at `cluss.nl/` and in English at `cluss.nl/en/`, with an ES/EN switch in the top bar. Every text in `content/site.mjs` has both versions (`{ es: '…', en: '…' }`), so change both. The members area is only in Spanish.
+
 ```bash
 npm run dev
 ```

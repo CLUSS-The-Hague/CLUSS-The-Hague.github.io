@@ -16,10 +16,10 @@
   burger?.addEventListener('click', () => setMenu(menu.hidden));
   addEventListener('keydown', (e) => { if (e.key === 'Escape' && menu && !menu.hidden) { setMenu(false); burger.focus(); } });
 
-  // ── "Iniciar sesión" becomes "Área de miembros" for people already signed in ──
+  // ── "Iniciar sesión" becomes its data-sesion text ("Área de miembros") for people already signed in ──
   try {
     if (Object.keys(localStorage).some((k) => /^sb-.+-auth-token$/.test(k))) {
-      for (const a of $$('[data-sesion]')) a.textContent = 'Área de miembros';
+      for (const a of $$('[data-sesion]')) a.textContent = a.dataset.sesion;
     }
   } catch { /* storage blocked: keep the default label */ }
 
@@ -74,9 +74,10 @@
   for (const b of $$('[data-copy]')) {
     b.addEventListener('click', async () => {
       const label = b.querySelector('[data-copy-l]');
-      try { await navigator.clipboard.writeText(b.dataset.copy); label.textContent = '¡Copiado!'; }
+      const idle = b.dataset.copyIdle || (b.dataset.copyIdle = label.textContent);
+      try { await navigator.clipboard.writeText(b.dataset.copy); label.textContent = b.dataset.copyDone || '✓'; }
       catch { label.textContent = b.dataset.copy; }
-      setTimeout(() => { label.textContent = 'Copiar'; }, 2000);
+      setTimeout(() => { label.textContent = idle; }, 2000);
     });
   }
 })();

@@ -21,6 +21,7 @@ if (meta) {
   };
   const instagram = document.querySelector('a[href*="instagram.com"]')?.href || '';
   const today = todayInHague();
+  const lang = document.documentElement.lang === 'en' ? 'en' : 'es';
 
   const home = document.querySelector('[data-live="home-event"]');
   const nextBox = document.querySelector('[data-live="next-events"]');
@@ -28,10 +29,10 @@ if (meta) {
   if (home || nextBox || pastBox) {
     get('events', 'select=*&status=eq.published&order=date.asc').then((rows) => {
       const { next, past } = splitEvents(rows, today);
-      swap(home, fingerprint([today, next[0] || null]), next[0] ? eventPoster(next[0]) : '');
+      swap(home, fingerprint([today, next[0] || null]), next[0] ? eventPoster(next[0], { lang }) : '');
       const fp = fingerprint([today, next, past]);
-      swap(nextBox, fp, next.length ? next.map((ev) => eventPoster(ev, { moreLink: false, showText: true, headTag: 'h3', instagram })).join('') : noNextEvents);
-      swap(pastBox, fp, past.map(pastEvent).join(''));
+      swap(nextBox, fp, next.length ? next.map((ev) => eventPoster(ev, { lang, moreLink: false, showText: true, headTag: 'h3', instagram })).join('') : noNextEvents(lang));
+      swap(pastBox, fp, past.map((ev) => pastEvent(ev, lang)).join(''));
     }).catch(() => {});
   }
 
@@ -39,18 +40,20 @@ if (meta) {
   if (postsBox) {
     get('posts', 'select=*&status=eq.published&order=published_at.desc').then((rows) => {
       const posts = rows.map(normPost);
-      swap(postsBox, fingerprint(posts), posts.length ? posts.map(postCard).join('') : noPosts);
+      swap(postsBox, fingerprint(posts), posts.length ? posts.map((p, i) => postCard(p, i, lang)).join('') : noPosts(lang));
     }).catch(() => {});
   }
 
   // A post published after the last build has no page yet, so the 404 page draws it.
   const postBox = document.querySelector('[data-live="post"]');
-  const slug = location.pathname.match(/^\/blog\/([a-z0-9]+(?:-[a-z0-9]+)*)\/?$/)?.[1];
+  const found = location.pathname.match(/^(\/en)?\/blog\/([a-z0-9]+(?:-[a-z0-9]+)*)\/?$/);
+  const slug = found?.[2];
+  const postLang = found?.[1] ? 'en' : 'es';
   if (postBox && slug) {
     get('posts', `select=*&status=eq.published&slug=eq.${encodeURIComponent(slug)}&limit=1`).then((rows) => {
       if (!rows.length) return;
       const p = normPost(rows[0]);
-      postBox.innerHTML = postArticle(p);
+      postBox.innerHTML = postArticle(p, postLang);
       document.querySelector('[data-perdido]')?.remove();
       document.title = `${p.title} · CLÜSS`;
       document.querySelector('meta[name="description"]')?.setAttribute('content', esc(p.excerpt || p.title));
